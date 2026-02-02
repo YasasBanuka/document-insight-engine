@@ -1,0 +1,42 @@
+# Compiled files
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# IDE files
+.idea/
+*.iml
+*.iws
+.vscode/
+.DS_Store
+
+# Spring Boot
+application-local.yml
+application-local.properties
+
+# Logs
+logs/
+*.log
+
+# Uploaded files (don't commit user data!)
+uploads/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Database
+*.db
+*.sqlite
+
+# Environment variables
+.env
+.env.local
