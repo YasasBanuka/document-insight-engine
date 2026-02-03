@@ -27,7 +27,7 @@ public class DocumentChunk {
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
 
-    @Column(columnDefinition = "vector(1536)")
+    @Column(columnDefinition = "vector(1536)", insertable = false, updatable = false)
     private String embedding;  // Temporary: improve this later
 
     @Column(name = "token_count")
