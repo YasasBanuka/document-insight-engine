@@ -6,6 +6,7 @@ import com.webdynamo.document_insight.model.Document;
 import com.webdynamo.document_insight.model.DocumentChunk;
 import com.webdynamo.document_insight.service.DocumentChunkService;
 import com.webdynamo.document_insight.service.DocumentService;
+import com.webdynamo.document_insight.service.VectorSearchService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,7 @@ public class DocumentController {
 
     private final DocumentService documentService;
     private final DocumentChunkService documentChunkService;
+    private final VectorSearchService vectorSearchService;
 
     /**
      * Get all documents for a user
@@ -159,5 +161,46 @@ public class DocumentController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(chunkDTOs);
+    }
+
+    /**
+     * Search across all documents
+     */
+    @GetMapping("/search")
+    public ResponseEntity<List<Map<String, Object>>> searchDocuments(
+            @RequestParam("query") String query,
+            @RequestParam(value = "limit", defaultValue = "5") int limit) {
+
+        log.info("Search request: {} (limit: {})", query, limit);
+
+        try {
+            List<Map<String, Object>> results = vectorSearchService.searchSimilarChunks(query, limit);
+            return ResponseEntity.ok(results);
+
+        } catch (Exception e) {
+            log.error("Search failed", e);
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * Search within a specific document
+     */
+    @GetMapping("/{id}/search")
+    public ResponseEntity<List<Map<String, Object>>> searchInDocument(
+            @PathVariable Long id,
+            @RequestParam("query") String query,
+            @RequestParam(value = "limit", defaultValue = "5") int limit) {
+
+        log.info("Search in document {} for: {}", id, query);
+
+        try {
+            List<Map<String, Object>> results = vectorSearchService.searchInDocument(id, query, limit);
+            return ResponseEntity.ok(results);
+
+        } catch (Exception e) {
+            log.error("Search failed", e);
+            return ResponseEntity.badRequest().build();
+        }
     }
 }
