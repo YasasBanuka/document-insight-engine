@@ -1,6 +1,8 @@
 package com.webdynamo.document_insight.service;
 
 import com.webdynamo.document_insight.model.Document;
+import com.webdynamo.document_insight.model.DocumentChunk;
+import com.webdynamo.document_insight.repo.DocumentChunkRepository;
 import com.webdynamo.document_insight.repo.DocumentRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -8,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,6 +22,9 @@ public class DocumentService {
     private final DocumentRepository documentRepository;
     private final DocumentChunkService documentChunkService;
     private final FileStorageService fileStorageService;
+    private final DocumentParserService documentParserService;
+    private final TextChunkingService textChunkingService;
+    private final DocumentChunkRepository documentChunkRepository;
 
     /**
      * Get all documents for a specific user
@@ -111,5 +117,58 @@ public class DocumentService {
 
         log.info("Document uploaded successfully with id: {}", saved.getId());
         return saved;
+    }
+
+    /**
+     * Upload document with full processing: parse and chunk
+     */
+    @Transactional
+    public Document uploadAndProcessDocument(MultipartFile file, Long userId) {
+        log.info("Uploading and processing document: {} for user: {}", file.getOriginalFilename(), userId);
+
+        // Validate file type
+        if (!fileStorageService.isValidFileType(file.getContentType())) {
+            throw new RuntimeException("Unsupported file type: " + file.getContentType());
+        }
+
+        // Store file
+        String storedFilename = fileStorageService.storeFile(file);
+        Path filePath = fileStorageService.getFilePath(storedFilename);
+
+        // Create document entity
+        Document document = new Document();
+        document.setFilename(file.getOriginalFilename());
+        document.setContentType(file.getContentType());
+        document.setFilePath(storedFilename);
+        document.setFileSize(file.getSize());
+        document.setUserId(userId);
+
+        // Save document first to get ID
+        Document savedDocument = documentRepository.save(document);
+        log.info("Document saved with id: {}", savedDocument.getId());
+
+        // Parse document to extract text
+        String text = documentParserService.parseDocument(filePath, file.getContentType());
+        log.info("Extracted {} characters from document", text.length());
+
+        // Chunk the text
+        List<String> chunks = textChunkingService.chunkText(text);
+        log.info("Created {} chunks", chunks.size());
+
+        // Save chunks to database
+        for (int i = 0; i < chunks.size(); i++) {
+            DocumentChunk chunk = new DocumentChunk();
+            chunk.setDocument(savedDocument);
+            chunk.setChunkIndex(i);
+            chunk.setContent(chunks.get(i));
+            chunk.setTokenCount(textChunkingService.estimateTokenCount(chunks.get(i)));
+            // embedding will be null for now - we'll add that in Phase 3
+
+
+            documentChunkRepository.save(chunk);
+        }
+
+        log.info("Document processing complete: {} chunks saved", chunks.size());
+        return savedDocument;
     }
 }

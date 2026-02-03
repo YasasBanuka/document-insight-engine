@@ -3,6 +3,7 @@ package com.webdynamo.document_insight.controller;
 import com.webdynamo.document_insight.dto.DocumentDTO;
 import com.webdynamo.document_insight.dto.UploadResponse;
 import com.webdynamo.document_insight.model.Document;
+import com.webdynamo.document_insight.model.DocumentChunk;
 import com.webdynamo.document_insight.service.DocumentChunkService;
 import com.webdynamo.document_insight.service.DocumentService;
 import lombok.RequiredArgsConstructor;
@@ -11,7 +12,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -95,7 +98,7 @@ public class DocumentController {
     }
 
     /**
-     * Upload a new document
+     * Upload a new document with full processing
      */
     @PostMapping("/upload")
     public ResponseEntity<UploadResponse> uploadDocument(
@@ -105,21 +108,22 @@ public class DocumentController {
         log.info("Upload request received: {} ({})", file.getOriginalFilename(), file.getContentType());
 
         try {
-            // Validate file is not empty
             if (file.isEmpty()) {
                 return ResponseEntity.badRequest().body(
                         new UploadResponse(null, null, "File is empty", 0L, null)
                 );
             }
 
-            // Upload and save document
-            Document document = documentService.uploadDocument(file, userId);
+            // Upload and process (parse + chunk)
+            Document document = documentService.uploadAndProcessDocument(file, userId);
 
-            // Create response
+            // Get chunk count
+            Long chunkCount = documentChunkService.getChunkCount(document.getId());
+
             UploadResponse response = new UploadResponse(
                     document.getId(),
                     document.getFilename(),
-                    "File uploaded successfully",
+                    "File uploaded and processed successfully. " + chunkCount + " chunks created.",
                     document.getFileSize(),
                     document.getContentType()
             );
@@ -132,5 +136,28 @@ public class DocumentController {
                     new UploadResponse(null, file.getOriginalFilename(), "Upload failed: " + e.getMessage(), 0L, null)
             );
         }
+    }
+
+    /**
+     * Get all chunks for a document
+     */
+    @GetMapping("/{id}/chunks")
+    public ResponseEntity<List<Map<String, Object>>> getDocumentChunks(@PathVariable Long id) {
+        log.info("Fetching chunks for document: {}", id);
+
+        List<DocumentChunk> chunks = documentChunkService.getChunksForDocument(id);
+
+        // Convert to simple DTO
+        List<Map<String, Object>> chunkDTOs = chunks.stream()
+                .map(chunk -> {
+                    Map<String, Object> dto = new HashMap<>();
+                    dto.put("chunkIndex", chunk.getChunkIndex());
+                    dto.put("content", chunk.getContent());
+                    dto.put("tokenCount", chunk.getTokenCount());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(chunkDTOs);
     }
 }
