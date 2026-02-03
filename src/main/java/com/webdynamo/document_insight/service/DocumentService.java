@@ -25,6 +25,7 @@ public class DocumentService {
     private final DocumentParserService documentParserService;
     private final TextChunkingService textChunkingService;
     private final DocumentChunkRepository documentChunkRepository;
+    private final EmbeddingService embeddingService;
 
     /**
      * Get all documents for a specific user
@@ -153,22 +154,29 @@ public class DocumentService {
 
         // Chunk the text
         List<String> chunks = textChunkingService.chunkText(text);
-        log.info("Created {} chunks", chunks.size());
 
-        // Save chunks to database
+        // Generate embeddings and save chunks
+        log.info("Generating embeddings for {} chunks", chunks.size());
         for (int i = 0; i < chunks.size(); i++) {
+            String chunkContent = chunks.get(i);
+
+            // Generate embedding for this chunk
+            float[] embedding = embeddingService.generateEmbedding(chunkContent);
+            String vectorString = embeddingService.embeddingToVector(embedding);
+
+            // Create and save chunk with embedding
             DocumentChunk chunk = new DocumentChunk();
             chunk.setDocument(savedDocument);
             chunk.setChunkIndex(i);
-            chunk.setContent(chunks.get(i));
-            chunk.setTokenCount(textChunkingService.estimateTokenCount(chunks.get(i)));
-            // embedding will be null for now - we'll add that in Phase 3
-
+            chunk.setContent(chunkContent);
+            chunk.setTokenCount(textChunkingService.estimateTokenCount(chunkContent));
+            chunk.setEmbedding(vectorString);  // ✅ Now storing the embedding!
 
             documentChunkRepository.save(chunk);
-        }
 
-        log.info("Document processing complete: {} chunks saved", chunks.size());
+            log.debug("Saved chunk {} with embedding dimension: {}", i, embedding.length);
+        }
+        log.info("All chunks embedded and saved successfully");
         return savedDocument;
     }
 }
