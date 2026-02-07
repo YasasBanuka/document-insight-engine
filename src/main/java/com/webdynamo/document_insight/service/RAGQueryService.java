@@ -1,14 +1,20 @@
 package com.webdynamo.document_insight.service;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -17,6 +23,7 @@ public class RAGQueryService {
 
     private final VectorSearchService vectorSearchService;
     private final ChatClient.Builder chatClientBuilder;
+    private final ChatModel chatModel;
 
     /**
      * Answer a question using RAG (Retrieval-Augmented Generation)
@@ -125,5 +132,40 @@ public class RAGQueryService {
         ));
 
         return prompt.getContents();
+    }
+
+    /**
+     * Answer question using only user's documents
+     */
+    public String answerQuestionForUser(String question, Long userId, int contextChunks) {
+        log.info("RAG Query for user {}: {}", userId, question);
+
+        // Search only user's documents
+        List<Map<String, Object>> relevantChunks = vectorSearchService
+                .searchSimilarChunksForUser(question, userId, contextChunks);
+
+        if (relevantChunks.isEmpty()) {
+            return "I don't have enough information in your documents to answer this question.";
+        }
+
+        // Build context from chunks
+        String context = relevantChunks.stream()
+                .map(chunk -> (String) chunk.get("content"))
+                .collect(Collectors.joining("\n\n"));
+
+        // Build prompt
+        String prompt = String.format("""
+            You are a helpful AI assistant. Answer the question based ONLY on the provided context.
+            
+            Context:
+            %s
+            
+            Question: %s
+            
+            Answer:
+            """, context, question);
+
+        // Generate answer
+        return chatModel.call(prompt);
     }
 }

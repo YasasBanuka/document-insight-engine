@@ -164,4 +164,50 @@ public class VectorSearchService {
 
         return response;
     }
+
+    /**
+     * Search similar chunks only within user's documents
+     */
+    public List<Map<String, Object>> searchSimilarChunksForUser(
+            String query,
+            Long userId,
+            int limit
+    ) {
+        log.info("Searching similar chunks for user: {} with query: {}", userId, query);
+
+        // Generate query embedding
+        float[] queryEmbedding = embeddingService.generateEmbedding(query);
+        String queryVector = embeddingService.embeddingToVector(queryEmbedding);
+
+        // SQL query with userId filter (positional parameters)
+        String sql = """
+        SELECT 
+            dc.id,
+            dc.document_id,
+            dc.chunk_index,
+            dc.content,
+            dc.token_count,
+            d.filename,
+            1 - (dc.embedding::vector <=> ?::vector) as similarity
+        FROM document_chunks dc
+        JOIN documents d ON dc.document_id = d.id
+        WHERE d.user_id = ?
+          AND dc.embedding IS NOT NULL
+        ORDER BY dc.embedding::vector <=> ?::vector
+        LIMIT ?
+        """;
+
+        // Execute with positional parameters
+        List<Map<String, Object>> results = jdbcTemplate.queryForList(
+                sql,
+                queryVector,   // First ?
+                userId,        // Second ?
+                queryVector,   // Third ? (for ORDER BY)
+                limit          // Fourth ?
+        );
+
+        log.info("Found {} results for user: {}", results.size(), userId);
+        return results;
+    }
+
 }
